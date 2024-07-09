@@ -5,3 +5,12 @@
 ![proxy image](https://github.com/imrany/proxy-server/blob/main/assets/proxy_image.webp)
 
 <sub>This server is designed to block websites defined in a text file. We will use Axum’s http-proxy example and add the feature to block the websites.</sub>
+
+
+### Running the project
+```bash
+cargo run
+```
+```bash
+ curl -v -x "127.0.0.1:8080" https://tokio.rs
+ ```
