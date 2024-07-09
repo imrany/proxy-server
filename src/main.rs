@@ -14,9 +14,16 @@ use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tower::Service;
 use tower::ServiceExt;
-
+use tower_http::trace::{self, TraceLayer};
 use hyper_util::rt::TokioIo;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::Level;
+use serde_json::{Value, json};
+
+//routes
+async fn root()->Json<Value>{
+    Json(json!({"message":"Hello world!"}))
+}
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +32,7 @@ async fn main() {
         .init();
 
     let router_svc = Router::new()
-        .route("/", get(|| async { "Hello, World!" }))
+        .route("/", get(root)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(
