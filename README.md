@@ -11,6 +11,7 @@
 ```bash
 cargo run
 ```
+Open a new terminal or cmd and run curl
 ```bash
  curl -v -x "127.0.0.1:8080" https://tokio.rs
  ```
