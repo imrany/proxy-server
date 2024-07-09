@@ -32,7 +32,7 @@ async fn main() {
         .init();
 
     let router_svc = Router::new()
-        .route("/", get(root)
+        .route("/", get(root))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(
