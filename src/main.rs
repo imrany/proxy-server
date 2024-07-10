@@ -32,7 +32,7 @@ async fn root()->Json<Value>{
 #[tokio::main]
 async fn main() {
     let file_path = "./blacklist.txt";
-    println!("{:?}", read_file_lines_to_vec(&file_path.to_string());
+    println!("{:?}", read_file_lines_to_vec(&file_path.to_string()));
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())

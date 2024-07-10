@@ -1,10 +1,10 @@
 use std::{
-    io::{BufReader,BufRead},
+    io::{BufReader,BufRead, Result},
     fs,
 };
 
-pub fn read_file_lines_to_vec(filename: &str) -> io::Result<Vec<String>>{
- let file_in = fs::File::open(filename)?; 
+pub fn read_file_lines_to_vec(filename: &str) -> Vec<String>{
+ let file_in = fs::File::open(filename).unwrap(); 
  let file_reader = BufReader::new(file_in); 
- Ok(file_reader.lines().filter_map(io::Result::ok).collect()) 
+ file_reader.lines().filter_map(Result::ok).collect()
 }
