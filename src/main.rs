@@ -20,6 +20,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use tracing::Level;
 use serde_json::{Value, json};
 
+mod read_txt;
+use read_txt::read_file_lines_to_vec;
+
+
 //routes
 async fn root()->Json<Value>{
     Json(json!({"message":"Hello world!"}))
@@ -27,6 +31,9 @@ async fn root()->Json<Value>{
 
 #[tokio::main]
 async fn main() {
+    let file_path = "./blacklist.txt";
+    println!("{:?}", read_file_lines_to_vec(&file_path.to_string());
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .init();
