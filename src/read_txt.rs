@@ -4,7 +4,15 @@ use std::{
 };
 
 pub fn read_file_lines_to_vec(filename: &str) -> Vec<String>{
- let file_in = fs::File::open(filename).unwrap(); 
+ let file_in=match fs::File::open(filename){
+    Ok(v)=>{
+        v
+    },
+    Err(e)=>{
+        println!("{}",e);
+        fs::File::create("blacklist.txt").unwrap()
+    }
+ }; 
  let file_reader = BufReader::new(file_in); 
  file_reader.lines().filter_map(Result::ok).collect()
 }
