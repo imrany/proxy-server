@@ -26,13 +26,11 @@ use read_txt::check_address_block;
 
 //routes
 async fn root()->Json<Value>{
-    Json(json!({"message":"Hello world!"}))
+    Json(json!({"message":"Hello user!"}))
 }
 
 #[tokio::main]
 async fn main() {
-    println!("{:?}", check_address_block("instagram.com"));
-
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
         .init();
