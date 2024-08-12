@@ -21,7 +21,7 @@ use tracing::Level;
 use serde_json::{Value, json};
 
 mod read_txt;
-use read_txt::read_file_lines_to_vec;
+use read_txt::check_address_block;
 
 
 //routes
@@ -31,8 +31,7 @@ async fn root()->Json<Value>{
 
 #[tokio::main]
 async fn main() {
-    let file_path = "./blacklist.txt";
-    println!("{:?}", read_file_lines_to_vec(&file_path.to_string()));
+    println!("{:?}", check_address_block("instagram.com"));
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
@@ -93,16 +92,20 @@ async fn proxy(req: Request) -> Result<Response, hyper::Error> {
     tracing::trace!(?req);
 
     if let Some(host_addr) = req.uri().authority().map(|auth| auth.to_string()) {
-        tokio::task::spawn(async move {
-            match hyper::upgrade::on(req).await {
-                Ok(upgraded) => {
-                    if let Err(e) = tunnel(upgraded, host_addr).await {
-                        tracing::warn!("server io error: {}", e);
-                    };
+        if check_address_block(&host_addr) == true{
+            println!("This is blocked");
+        }else{
+            tokio::task::spawn(async move {
+                match hyper::upgrade::on(req).await {
+                    Ok(upgraded) => {
+                        if let Err(e) = tunnel(upgraded, host_addr).await {
+                            tracing::warn!("server io error: {}", e);
+                        };
+                    }
+                    Err(e) => tracing::warn!("upgrade error: {}", e),
                 }
-                Err(e) => tracing::warn!("upgrade error: {}", e),
-            }
-        });
+            });
+        };
 
         Ok(Response::new(Body::empty()))
     } else {

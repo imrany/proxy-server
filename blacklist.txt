@@ -1,2 +1,3 @@
-instagram.com
-twitter.com
+www.instagram.com:443
+twitter.com:443
+discord.com:443
