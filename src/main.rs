@@ -14,9 +14,12 @@ use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 use tower::Service;
 use tower::ServiceExt;
-use tower_http::trace::{self, TraceLayer};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::{self, TraceLayer}
+};
 use hyper_util::rt::TokioIo;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing::Level;
 use serde_json::{Value, json};
 
@@ -25,18 +28,26 @@ use read_txt::check_address_block;
 
 
 //routes
-async fn root()->Json<Value>{
+async fn json_response()->Json<Value>{
     Json(json!({"message":"Hello user!"}))
 }
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(fmt::layer())
         .init();
 
+    let api_routes=Router::new()
+        .route("/",get(json_response));
+        .route("/json",get(json_response));
+        
     let router_svc = Router::new()
-        .route("/", get(root))
+        .nest_service(
+            "/", ServeDir::new("assets/static")
+            .not_found_service(ServeFile::new("assets/static/not_found.html")),
+        )
+        .nest("/api",api_routes)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(
