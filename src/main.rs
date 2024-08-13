@@ -39,7 +39,7 @@ async fn main() {
         .init();
 
     let api_routes=Router::new()
-        .route("/",get(json_response));
+        .route("/",get(json_response))
         .route("/json",get(json_response));
         
     let router_svc = Router::new()
