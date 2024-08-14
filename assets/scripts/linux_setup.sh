@@ -2,7 +2,7 @@
 
 # Define the proxy server and port
 #monorail.proxy.rlwy.net:31125
-PROXY_SERVER="http:/monorail.proxy.rlwy.net:31125"
+PROXY_SERVER="http://monorail.proxy.rlwy.net:31125"
 
 # Configure environment variables for HTTP, HTTPS, and FTP proxies
 export http_proxy=$PROXY_SERVER
