@@ -21,5 +21,5 @@ function FindProxyForURL(url, host) {
     }
 
     // Default to a fallback proxy for all other requests
-    return "PROXY monorail.proxy.rlwy.net:31125; DIRECT";
+    return "PROXY proxy-server-tvdj.onrender.com:80; DIRECT";
 }
