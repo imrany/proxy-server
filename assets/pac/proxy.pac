@@ -16,7 +16,7 @@ function FindProxyForURL(url, host) {
     }
 
     // Directly access the specified IP range without a proxy
-    if (isInNet(host, "192.168.0.0", "255.255.0.0")) {
+    if (isInNet(host, "192.168.0.0", "255.255.0.0") || isInNet(host, "10.208.0.0", "255.255.0.0")) {
         return "DIRECT";
     }
 
