@@ -10,7 +10,7 @@ pub fn read_file_lines_to_vec(filename: &str) -> Vec<String>{
     },
     Err(e)=>{
         println!("{}",e);
-        fs::File::create("blacklist.txt").unwrap()
+        fs::File::create("blocked_sites.txt").unwrap()
     }
  }; 
  let file_reader = BufReader::new(file_in); 
@@ -18,7 +18,7 @@ pub fn read_file_lines_to_vec(filename: &str) -> Vec<String>{
 }
 
 pub fn check_address_block(address_to_check: &str) -> bool {
- let addresses_blocked: Vec<String> = read_file_lines_to_vec(&"./blacklist.txt");
+ let addresses_blocked: Vec<String> = read_file_lines_to_vec(&"./blocked_sites.txt");
  let address_in = addresses_blocked.contains(&address_to_check.to_string());
  return address_in
 }
