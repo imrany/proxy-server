@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Rust project
 # Stage 1: Build stage
-FROM rust:1.75-slim AS builder
+FROM rust:1.83-slim as builder
 
 # Install system dependencies needed for building
 RUN apt-get update && apt-get install -y \
