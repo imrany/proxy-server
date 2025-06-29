@@ -15,6 +15,9 @@ WORKDIR /app
 # Copy manifests and source code
 COPY . .
 
+# Update rustup and toolchain to ensure compatibility with Cargo.lock version 4
+RUN rustup self update && rustup update stable
+
 # Build for release
 RUN cargo build --release
 

@@ -19,39 +19,39 @@
 ### Option 1: Build with Docker
 
 1. **Build the image**
-   ```bash
-   docker build -t proxy .
-   ```
+```bash
+docker build -t proxy .
+```
 
 2. **Run the container**
-   ```bash
-   docker run -p 8080:8080 -d proxy
-   ```
+```bash
+docker run -p 8080:8080 -d proxy
+```
 
 ### Option 2: Pull from GitHub Container Registry
 
 1. **Pull the pre-built image**
-   ```bash
-   docker pull ghcr.io/imrany/proxy
-   ```
+```bash
+docker pull ghcr.io/imrany/proxy
+```
 
 2. **Run the container**
-   ```bash
-   docker run -p 8080:8080 -d ghcr.io/imrany/proxy
-   ```
+```bash
+docker run -p 8080:8080 -d ghcr.io/imrany/proxy
+```
 
 ### Option 3: Run from Source
 
 1. **Prerequisites**
-   - Rust 1.70+ installed
-   - Cargo package manager
+- Rust 1.70+ installed
+- Cargo package manager
 
 2. **Clone and run**
-   ```bash
-   git clone https://github.com/imrany/proxy-server.git
-   cd proxy-server
-   cargo run
-   ```
+```bash
+git clone https://github.com/imrany/proxy-server.git
+cd proxy-server
+cargo run
+```
 
 ## Testing the Proxy
 
@@ -107,10 +107,10 @@ The proxy will block access to any domains listed in this file.
 
 ```bash
 docker run -p 8080:8080 -d \
-  -e PROXY_PORT=8080 \
-  -e LOG_LEVEL=debug \
-  -v $(pwd)/blocked_sites.txt:/app/blocked_sites.txt \
-  ghcr.io/imrany/proxy
+-e PROXY_PORT=8080 \
+-e LOG_LEVEL=debug \
+-v $(pwd)/blocked_sites.txt:/app/blocked_sites.txt \
+ghcr.io/imrany/proxy
 ```
 
 ## Development
