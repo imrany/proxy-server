@@ -197,6 +197,33 @@ sudo docker run -p 80:8080 proxy
 - Check file format (one domain per line)
 - Verify domain names don't include protocols (http://)
 
+### Usage example
+```bash
+# View all connections
+curl http://127.0.0.1:8080/api/connections
+
+# View user statistics  
+curl http://127.0.0.1:8080/api/stats
+
+# View active connections
+curl http://127.0.0.1:8080/api/active
+
+# View all payments
+curl http://127.0.0.1:8080/api/payment/all
+
+# Pay for a specific
+curl -X POST http://127.0.0.1:8080/api/payment/record   -H "Content-Type: application/json"   -d '{
+    "client_ip": "192.168.1.114",
+    "amount": 150.0,
+    "payment_method": "mpesa",
+    "transaction_id": "MPX123456789"
+}'
+
+### View IP payment status
+curl "http://127.0.0.1:8080/api/payment/status?ip=192.168.1.114"
+
+```
+
 ### Support
 
 - 📧 Email: [imranmat254@gmail.com]
