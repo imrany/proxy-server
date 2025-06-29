@@ -150,9 +150,8 @@ docker run -p 8080:8080 -v $(pwd):/app proxy:dev
 The proxy logs all requests and blocked attempts:
 
 ```
-2024-01-15T10:30:45Z INFO  [proxy] Starting proxy server on 0.0.0.0:8080
-2024-01-15T10:30:50Z INFO  [proxy] ALLOWED: GET https://tokio.rs
-2024-01-15T10:30:55Z WARN  [proxy] BLOCKED: GET https://facebook.com
+2025-06-29T11:34:48.243347Z DEBUG proxy: listening on 0.0.0.0:8080
+2025-06-29T11:36:30.369691Z TRACE proxy: req=Request { method: CONNECT, uri: tokio.rs:443, version: HTTP/1.1, headers: {"host": "tokio.rs:443", "user-agent": "curl/8.5.0", "proxy-connection": "Keep-Alive"}, body: Body(UnsyncBoxBody) }
 ```
 
 ## Use Cases
