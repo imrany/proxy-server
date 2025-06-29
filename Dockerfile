@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Rust project
 # Stage 1: Build stage
-FROM rust:1.75-slim as builder
+FROM rust:1.75-slim AS builder
 
 # Install system dependencies needed for building
 RUN apt-get update && apt-get install -y \
@@ -12,11 +12,8 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /app
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
-
-# Copy source code
-COPY src ./src
+# Copy manifests and source code
+COPY . .
 
 # Build for release
 RUN cargo build --release
