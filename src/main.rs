@@ -69,7 +69,7 @@ async fn main() {
                 router_svc.oneshot(req).await.map_err(|err| match err {})
             }
         }
-    });
+    }); 
 
     let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
         tower_service.clone().call(request)
