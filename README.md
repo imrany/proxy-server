@@ -32,7 +32,7 @@ docker run -p 8080:8080 -d proxy
 
 1. **Pull the pre-built image**
 ```bash
-docker pull ghcr.io/imrany/proxy
+docker pull ghcr.io/imrany/proxy:latest
 ```
 
 2. **Run the container**
@@ -211,7 +211,7 @@ curl http://127.0.0.1:8080/api/active
 
 ### Support
 
-- 📧 Email: [imranmat254@gmail.com]
+- 📧 Email: [imranmat254@gmail.com](imranmat254@gmail.com)
 - Sponsor me: [Github Sponsors](https://github.com/sponsors/imrany)
 - 🐛 Issues: [GitHub Issues](https://github.com/imrany/proxy-server/issues)
 - 💬 Discussions: [GitHub Discussions](https://github.com/imrany/proxy-server/discussions)
