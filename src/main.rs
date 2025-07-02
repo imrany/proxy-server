@@ -98,8 +98,8 @@ async fn main() {
         
     let router_svc = Router::new()
         .nest_service(
-            "/", ServeDir::new("assets/static")
-            .not_found_service(ServeFile::new("assets/static/not_found.html")),
+            "/", ServeDir::new("assets/web")
+            .not_found_service(ServeFile::new("assets/not_found.html")),
         )
         .nest("/api", api_routes)
         .layer(
