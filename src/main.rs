@@ -44,7 +44,6 @@ use tokio::sync::RwLock;
 use tower::Service;
 use tower::ServiceExt;
 use tower_http::{
-    services::{ServeDir, ServeFile},
     trace::{self, TraceLayer}
 };
 use hyper_util::rt::TokioIo;
@@ -54,6 +53,8 @@ use chrono::Utc;
 
 mod read_txt;
 use read_txt::check_address_block;
+
+use crate::serve::{index_page, notfound_page};
 
 
 #[tokio::main]
@@ -88,14 +89,15 @@ async fn main() {
 
     let pac_routes = Router::new()
         .route("/proxy.pac", get(serve_pac));
+
+    let page_routes = Router::new()
+        .route("/", get(index_page));
         
     let router_svc = Router::new()
-        .nest_service(
-            "/", ServeDir::new("assets/web")
-            .not_found_service(ServeFile::new("assets/not_found.html")),
-        )
+        .merge(page_routes)
         .nest("/pac",pac_routes)
         .nest("/api", api_routes)
+        .fallback(notfound_page)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(
