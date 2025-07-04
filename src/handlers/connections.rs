@@ -57,34 +57,58 @@ async fn get_active_connections(
     }))
 }
 
-pub 
-async fn log_connection(state: MonitoringState, conn_info: ConnectionInfo) {
-    let mut connections = state.write().await;
-    connections
-        .entry(conn_info.client_ip.clone())
-        .or_insert_with(Vec::new)
-        .push(conn_info);
-}
+// pub async fn get_location_ipinfo(ip: String) -> String{
+//     let url = format!("https://ipinfo.io/{}", ip);
 
-pub async fn update_connection_status(
-    state: MonitoringState,
-    client_ip: &str,
-    target_host: &str,
-    bytes_sent: u64,
-    bytes_received: u64,
-    duration_ms: u64,
-    status: &str
-) {
-    let mut connections = state.write().await;
-    if let Some(conn_list) = connections.get_mut(client_ip) {
-        for conn in conn_list.iter_mut().rev() {
-            if conn.target_host == target_host && conn.status == "active" {
-                conn.bytes_sent = bytes_sent;
-                conn.bytes_received = bytes_received;
-                conn.duration_ms = Some(duration_ms);
-                conn.status = status.to_string();
-                break;
-            }
-        }
-    }
-}
+//     #[derive(Deserialize)]
+//     struct IpInfo{
+//         ip: String,
+//         hostname: String,
+//         city: String,
+//         region: String,
+//         country: String,
+//         loc: String,
+//         org: String,
+//         postal: String,
+//         timezone: String,
+//         // readme: Option<String>,
+//         anycast:bool
+//     }
+
+//     let response = reqwest::get(&url)
+//         .await;
+            
+//     match response {
+//         Ok(resp) => {
+//             if resp.status().is_success() {
+//                 match resp.json::<IpInfo>().await {
+//                     Ok(info) => {
+//                         println!("IP: {}", info.ip);
+//                         println!("Hostname: {}", info.hostname);
+//                         println!("City: {}", info.city);
+//                         println!("Region: {}", info.region);
+//                         println!("Country: {}", info.country);
+//                         println!("Location: {}", info.loc);
+//                         println!("Organization: {}", info.org); 
+//                         println!("Postal Code: {}", info.postal);
+//                         println!("Timezone: {}", info.timezone);
+//                         println!("Anycast: {}", info.anycast);
+//                         info.loc
+//                     },
+//                     Err(e) => {
+//                         eprintln!("Failed to parse JSON: {}", e);
+//                         "".to_string()
+//                     }
+//                 }
+//             } else {
+//                 eprintln!("Failed to fetch IP info: {}", resp.status());
+//                 "".to_string()
+//             }
+//         },
+//         Err(e) => {
+//             eprintln!("Error making request: {}", e);
+//             "".to_string()
+//         }
+//     }
+// }
+
