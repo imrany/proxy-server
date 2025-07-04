@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     extract::Request,
     http::{
-        Method, StatusCode
+        Method, StatusCode, HeaderMap
     },
     response::{
         IntoResponse, Response
@@ -86,10 +86,10 @@ async fn main() {
         .with(
             fmt::layer()
                 .with_target(false)
-                .with_thread_ids(false) // Disable thread IDs for performance
+                .with_thread_ids(false)
                 .with_level(true)
-                .with_file(false) // Disable file info for performance
-                .with_line_number(false) // Disable line numbers for performance
+                .with_file(false)
+                .with_line_number(false)
         )
         .init();
 
@@ -130,7 +130,7 @@ async fn main() {
             TraceLayer::new_for_http()
                 .make_span_with(
                     trace::DefaultMakeSpan::new()
-                        .level(Level::WARN) // Reduce logging level for performance
+                        .level(Level::WARN)
                 )
                 .on_response(
                     trace::DefaultOnResponse::new().level(Level::WARN)
@@ -144,17 +144,18 @@ async fn main() {
         router,
     };
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    // Bind to localhost only since we're behind Nginx proxy
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
     tracing::info!("🚀 Proxy server listening on {}", addr);
     tracing::info!("📊 Monitor endpoints:");
     tracing::info!("  - GET /api/connections - All connections");
     tracing::info!("  - GET /api/stats - Statistics");
     tracing::info!("  - GET /api/active - Active connections");
     tracing::info!("⚙️  Max concurrent connections: {}", MAX_CONCURRENT_CONNECTIONS);
+    tracing::info!("🔒 Running behind Nginx proxy - binding to localhost only");
    
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    // Use a worker pool approach instead of spawning unlimited tasks
     loop {
         let (stream, client_addr) = match listener.accept().await {
             Ok(pair) => pair,
@@ -164,12 +165,11 @@ async fn main() {
             }
         };
 
-        // Acquire connection permit (rate limiting)
+        // Rate limiting with semaphore
         let permit = match app_state.connection_semaphore.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(_) => {
                 tracing::warn!("🚫 Connection limit reached, rejecting connection from {}", client_addr.ip());
-                // Immediately drop the connection if we're at capacity
                 drop(stream);
                 continue;
             }
@@ -179,13 +179,39 @@ async fn main() {
         let client_ip = client_addr.ip();
 
         tokio::spawn(async move {
-            let _permit = permit; // Keep permit alive for the duration of the connection
+            let _permit = permit;
             
             if let Err(e) = handle_connection(stream, client_ip, app_state).await {
                 tracing::warn!("❌ Connection error from {}: {:?}", client_ip, e);
             }
         });
     }
+}
+
+// Extract real client IP from proxy headers
+fn get_real_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
+    // Try X-Real-IP first (set by Nginx)
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(ip_str) = real_ip.to_str() {
+            if let Ok(ip) = ip_str.parse::<IpAddr>() {
+                return Some(ip);
+            }
+        }
+    }
+    
+    // Try X-Forwarded-For as fallback
+    if let Some(forwarded_for) = headers.get("x-forwarded-for") {
+        if let Ok(forwarded_str) = forwarded_for.to_str() {
+            // Take the first IP in the list (original client)
+            if let Some(first_ip) = forwarded_str.split(',').next() {
+                if let Ok(ip) = first_ip.trim().parse::<IpAddr>() {
+                    return Some(ip);
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 async fn handle_connection(
@@ -202,7 +228,12 @@ async fn handle_connection(
 
         async move {
             if req.method() == Method::CONNECT {
-                proxy(req, app_state, client_ip_str).await
+                // Get real client IP from proxy headers
+                let real_client_ip = get_real_client_ip(req.headers())
+                    .map(|ip| ip.to_string())
+                    .unwrap_or_else(|| client_ip_str.clone());
+                
+                proxy(req, app_state, real_client_ip).await
             } else {
                 app_state.router.clone().oneshot(req)
                     .await
@@ -220,7 +251,6 @@ async fn handle_connection(
 
     let io = TokioIo::new(stream);
 
-    // Add connection timeout
     let serve_future = http1::Builder::new()
         .preserve_header_case(true)
         .title_case_headers(true)
@@ -245,14 +275,20 @@ async fn proxy(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
+    // Log proxy headers for debugging (remove in production)
+    tracing::debug!("Proxy headers: X-Real-IP={:?}, X-Forwarded-For={:?}, X-Forwarded-Proto={:?}",
+        headers.get("x-real-ip"),
+        headers.get("x-forwarded-for"),
+        headers.get("x-forwarded-proto")
+    );
+
     if let Some(host_addr) = req.uri().authority().map(|auth| auth.to_string()) {
         let timestamp = Utc::now();
         
-        // Check if address should be blocked (existing block list check)
+        // Check if address should be blocked
         if check_address_block(&host_addr) {
             tracing::warn!("🚫 BLOCKED: {} attempting to connect to {}", client_ip, host_addr);
             
-            // Update stats efficiently using DashMap
             update_user_stats_optimized(&app_state.user_stats_state, &client_ip, true).await;
             
             let conn_info = ConnectionInfo {
@@ -266,7 +302,6 @@ async fn proxy(
                 duration_ms: Some(0),
             };
             
-            // Log connection efficiently
             let key = format!("{}_{}", client_ip, timestamp.timestamp_millis());
             app_state.monitoring_state.insert(key, conn_info);
             
@@ -286,7 +321,6 @@ async fn proxy(
 
         tracing::info!("✅ ALLOWED: {} → {}", client_ip, host_addr);
 
-        // Log connection attempt efficiently
         let conn_key = format!("{}_{}", client_ip, timestamp.timestamp_millis());
         let conn_info = ConnectionInfo {
             client_ip: client_ip.clone(),
@@ -302,7 +336,6 @@ async fn proxy(
         app_state.monitoring_state.insert(conn_key.clone(), conn_info);
         update_user_stats_optimized(&app_state.user_stats_state, &client_ip, false).await;
 
-        // Spawn tunnel task with timeout
         let monitoring_state = app_state.monitoring_state.clone();
         let user_stats_state = app_state.user_stats_state.clone();
         
@@ -311,7 +344,6 @@ async fn proxy(
                 Ok(upgraded) => {
                     let start_time = Utc::now();
                     
-                    // Add timeout to tunnel operation
                     let tunnel_result = tokio::time::timeout(
                         Duration::from_secs(TUNNEL_TIMEOUT_SECS),
                         tunnel(upgraded, host_addr.clone())
@@ -325,7 +357,6 @@ async fn proxy(
                             tracing::info!("✅ Tunnel completed: {} → {} | ⬆️ {} bytes ⬇️ {} bytes | ⏱️ {}ms", 
                                 client_ip, host_addr, bytes_sent, bytes_received, duration_ms);
                             
-                            // Update connection status efficiently
                             if let Some(mut conn) = monitoring_state.get_mut(&conn_key) {
                                 conn.bytes_sent = bytes_sent;
                                 conn.bytes_received = bytes_received;
@@ -333,7 +364,6 @@ async fn proxy(
                                 conn.status = "completed".to_string();
                             }
                             
-                            // Update user stats efficiently
                             update_user_stats_bytes(&user_stats_state, &client_ip, bytes_sent + bytes_received).await;
                         }
                         Ok(Err(e)) => {
@@ -373,7 +403,6 @@ async fn proxy(
 }
 
 async fn tunnel(upgraded: Upgraded, addr: String) -> std::io::Result<(u64, u64)> {
-    // Add connection timeout for the target server
     let mut server = tokio::time::timeout(
         Duration::from_secs(10),
         TcpStream::connect(&addr)
@@ -388,7 +417,6 @@ async fn tunnel(upgraded: Upgraded, addr: String) -> std::io::Result<(u64, u64)>
     Ok((from_client, from_server))
 }
 
-// Optimized user stats update using DashMap
 async fn update_user_stats_optimized(
     user_stats_state: &OptimizedUserStatsState,
     client_ip: &str,
@@ -412,7 +440,6 @@ async fn update_user_stats_optimized(
         });
 }
 
-// Optimized bytes update using DashMap
 async fn update_user_stats_bytes(
     user_stats_state: &OptimizedUserStatsState,
     client_ip: &str,
