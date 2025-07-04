@@ -28,7 +28,7 @@ pub async fn serve_pac() -> String {
         }
 
         // Your main proxy with fallback
-        return "PROXY triple-ts-mediclinic.com:8080; DIRECT";
+        return "PROXY proxy.villebiz.com; DIRECT";
     }
     "#.to_string()
 }
