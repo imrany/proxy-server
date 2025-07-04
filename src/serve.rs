@@ -28,7 +28,7 @@ pub async fn serve_pac() -> String {
         }
 
         // Your main proxy with fallback
-        return "PROXY proxy.villebiz.com; DIRECT";
+        return "PROXY prxy.villebiz.com; DIRECT";
     }
     "#.to_string()
 }
