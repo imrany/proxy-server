@@ -25,7 +25,7 @@ docker build -t proxy .
 
 2. **Run the container**
 ```bash
-docker run -p 8080:8080 -d proxy
+docker run -p 127.0.0.1:8080:8080 -d proxy
 ```
 
 ### Option 2: Pull from GitHub Container Registry
@@ -37,7 +37,7 @@ docker pull ghcr.io/imrany/proxy:latest
 
 2. **Run the container**
 ```bash
-docker run -p 8080:8080 -d ghcr.io/imrany/proxy
+docker run -p 127.0.0.1:8080:8080 -d ghcr.io/imrany/proxy
 ```
 
 ### Option 3: Run from Source
@@ -135,7 +135,7 @@ cargo test
 docker build -t proxy:dev .
 
 # Run with volume mounting for development
-docker run -p 8080:8080 -v $(pwd):/app proxy:dev
+docker run -p 127.0.0.1:8080:8080 -v $(pwd):/app proxy:dev
 ```
 
 ## Performance
