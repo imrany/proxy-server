@@ -1,9 +1,10 @@
 use serde_json::{Value, json};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap};
 use axum::response::Json;
-use tokio::sync::RwLock;
+
+use crate::OptimizedMonitoringState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionInfo {
@@ -17,37 +18,40 @@ pub struct ConnectionInfo {
     pub duration_ms: Option<u64>,
 }
 
-pub type MonitoringState = Arc<RwLock<HashMap<String, Vec<ConnectionInfo>>>>;
-
 pub async fn get_connections(
-    axum::extract::State(state): axum::extract::State<MonitoringState>
+    axum::extract::State(state): axum::extract::State<OptimizedMonitoringState>
 ) -> Json<Value> {
-    let connections = state.read().await;
+    let mut client_map = HashMap::new();
+
+    for entry in state.iter() {
+        let (client_ip, conn_list) = entry.pair();
+        let hosts: Vec<String> = vec![format!("{}:{}", conn_list.target_host, conn_list.user_agent.as_deref().unwrap_or("unknown"))];
+        client_map.insert(client_ip.clone(), hosts);
+    }
+
     Json(json!({
-        "total_clients": connections.len(),
-        "connections": *connections
+        "total_clients": client_map.len(),
+        "connections": client_map
     }))
 }
 
-pub 
-async fn get_active_connections(
-    axum::extract::State(state): axum::extract::State<MonitoringState>
+pub async fn get_active_connections(
+    axum::extract::State(state): axum::extract::State<OptimizedMonitoringState>
 ) -> Json<Value> {
-    let connections = state.read().await;
+    let connections = &state;
     let mut active_count = 0;
     let mut active_connections = Vec::new();
     
-    for (client_ip, conn_list) in connections.iter() {
-        for conn in conn_list {
-            if conn.status == "active" {
-                active_count += 1;
-                active_connections.push(json!({
-                    "client_ip": client_ip,
-                    "target_host": conn.target_host,
-                    "timestamp": conn.timestamp,
-                    "user_agent": conn.user_agent
-                }));
-            }
+    for entry in connections.iter() {
+        let (client_ip, conn) = entry.pair();
+        if conn.status == "active" {
+            active_count += 1;
+            active_connections.push(json!({
+                "client_ip": client_ip,
+                "target_host": conn.target_host,
+                "timestamp": conn.timestamp,
+                "user_agent": conn.user_agent
+            }));
         }
     }
     
@@ -56,59 +60,3 @@ async fn get_active_connections(
         "connections": active_connections
     }))
 }
-
-// pub async fn get_location_ipinfo(ip: String) -> String{
-//     let url = format!("https://ipinfo.io/{}", ip);
-
-//     #[derive(Deserialize)]
-//     struct IpInfo{
-//         ip: String,
-//         hostname: String,
-//         city: String,
-//         region: String,
-//         country: String,
-//         loc: String,
-//         org: String,
-//         postal: String,
-//         timezone: String,
-//         // readme: Option<String>,
-//         anycast:bool
-//     }
-
-//     let response = reqwest::get(&url)
-//         .await;
-            
-//     match response {
-//         Ok(resp) => {
-//             if resp.status().is_success() {
-//                 match resp.json::<IpInfo>().await {
-//                     Ok(info) => {
-//                         println!("IP: {}", info.ip);
-//                         println!("Hostname: {}", info.hostname);
-//                         println!("City: {}", info.city);
-//                         println!("Region: {}", info.region);
-//                         println!("Country: {}", info.country);
-//                         println!("Location: {}", info.loc);
-//                         println!("Organization: {}", info.org); 
-//                         println!("Postal Code: {}", info.postal);
-//                         println!("Timezone: {}", info.timezone);
-//                         println!("Anycast: {}", info.anycast);
-//                         info.loc
-//                     },
-//                     Err(e) => {
-//                         eprintln!("Failed to parse JSON: {}", e);
-//                         "".to_string()
-//                     }
-//                 }
-//             } else {
-//                 eprintln!("Failed to fetch IP info: {}", resp.status());
-//                 "".to_string()
-//             }
-//         },
-//         Err(e) => {
-//             eprintln!("Error making request: {}", e);
-//             "".to_string()
-//         }
-//     }
-// }
-

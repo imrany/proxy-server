@@ -13,7 +13,6 @@ use axum::{
 
 mod serve;
 use serve::{
-    serve_pac,
     index_page, 
     notfound_page
 };
@@ -26,7 +25,6 @@ use handlers::{
     },
     connections::{
         ConnectionInfo,
-        MonitoringState,
         get_connections,
         get_active_connections,
     },   
@@ -49,7 +47,7 @@ use tower_http::{
 use hyper_util::rt::TokioIo;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing::Level;
-use chrono::Utc;
+use chrono::{Utc, Duration as ChronoDuration};
 
 mod read_txt;
 use read_txt::check_address_block;
@@ -58,6 +56,9 @@ use read_txt::check_address_block;
 const MAX_CONCURRENT_CONNECTIONS: usize = 1000;
 const CONNECTION_TIMEOUT_SECS: u64 = 30;
 const TUNNEL_TIMEOUT_SECS: u64 = 300;
+const CLEANUP_INTERVAL_SECS: u64 = 300; // Clean up every 5 minutes
+const MAX_CONNECTION_AGE_HOURS: i64 = 24; // Keep connections for 24 hours
+const MAX_CONNECTIONS_TO_KEEP: usize = 10000; // Maximum connections to keep in memory
 
 // Optimized state types using DashMap for better concurrent performance
 type OptimizedMonitoringState = Arc<DashMap<String, ConnectionInfo>>;
@@ -99,13 +100,12 @@ async fn main() {
     let connection_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
 
     // Convert to legacy state types for handlers (if needed)
-    let legacy_monitoring_state: MonitoringState = Arc::new(RwLock::new(std::collections::HashMap::new()));
     let legacy_user_stats_state: UserStatsState = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
     let monitoring_api = Router::new()
         .route("/connections", get(get_connections))
         .route("/active", get(get_active_connections))
-        .with_state(legacy_monitoring_state.clone());
+        .with_state(monitoring_state.clone());
 
     let stats_api = Router::new()
         .route("/stats", get(get_user_stats))
@@ -115,15 +115,11 @@ async fn main() {
         .merge(monitoring_api)
         .merge(stats_api);
 
-    let pac_routes = Router::new()
-        .route("/proxy.pac", get(serve_pac));
-
     let page_routes = Router::new()
         .route("/", get(index_page));
         
     let router = Router::new()
         .merge(page_routes)
-        .nest("/pac", pac_routes)
         .nest("/api", api_routes)
         .fallback(notfound_page)
         .layer(
@@ -138,20 +134,29 @@ async fn main() {
         );
 
     let app_state = AppState {
-        monitoring_state,
-        user_stats_state,
+        monitoring_state: monitoring_state.clone(),
+        user_stats_state: user_stats_state.clone(),
         connection_semaphore,
         router,
     };
 
+    // Start the cleanup task
+    let cleanup_monitoring_state = monitoring_state.clone();
+    let cleanup_user_stats_state = user_stats_state.clone();
+    tokio::spawn(async move {
+        cleanup_old_connections(cleanup_monitoring_state, cleanup_user_stats_state).await;
+    });
+
     // Bind to localhost only since we're behind Nginx proxy
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     tracing::info!("🚀 Proxy server listening on {}", addr);
     tracing::info!("📊 Monitor endpoints:");
     tracing::info!("  - GET /api/connections - All connections");
     tracing::info!("  - GET /api/stats - Statistics");
     tracing::info!("  - GET /api/active - Active connections");
     tracing::info!("⚙️  Max concurrent connections: {}", MAX_CONCURRENT_CONNECTIONS);
+    tracing::info!("🧹 Connection cleanup: every {} seconds, max age {} hours", 
+        CLEANUP_INTERVAL_SECS, MAX_CONNECTION_AGE_HOURS);
     tracing::info!("🔒 Running behind Nginx proxy - binding to localhost only");
    
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -185,6 +190,73 @@ async fn main() {
                 tracing::warn!("❌ Connection error from {}: {:?}", client_ip, e);
             }
         });
+    }
+}
+
+// Periodic cleanup task to remove old connections
+async fn cleanup_old_connections(
+    monitoring_state: OptimizedMonitoringState,
+    user_stats_state: OptimizedUserStatsState,
+) {
+    let mut cleanup_interval = tokio::time::interval(Duration::from_secs(CLEANUP_INTERVAL_SECS));
+    
+    loop {
+        cleanup_interval.tick().await;
+        
+        let now = Utc::now();
+        let cutoff_time = now - ChronoDuration::hours(MAX_CONNECTION_AGE_HOURS);
+        
+        // Clean up old connections
+        let mut removed_count = 0;
+        let mut keys_to_remove = Vec::new();
+        
+        // First pass: identify keys to remove
+        for entry in monitoring_state.iter() {
+            let conn_info = entry.value();
+            
+            // Remove connections older than cutoff_time, or if we have too many connections
+            if conn_info.timestamp < cutoff_time || 
+               (monitoring_state.len() > MAX_CONNECTIONS_TO_KEEP && 
+                (conn_info.status == "completed" || conn_info.status == "failed" || conn_info.status == "blocked")) {
+                keys_to_remove.push(entry.key().clone());
+            }
+        }
+        
+        // Second pass: remove the identified keys
+        for key in keys_to_remove {
+            if monitoring_state.remove(&key).is_some() {
+                removed_count += 1;
+            }
+        }
+        
+        // Clean up old user stats (keep only users seen in last 7 days)
+        let user_cutoff_time = now - ChronoDuration::days(7);
+        let mut removed_users = 0;
+        let mut users_to_remove = Vec::new();
+        
+        // First pass: identify users to remove
+        for entry in user_stats_state.iter() {
+            let user_stats = entry.value();
+            if user_stats.last_seen < user_cutoff_time {
+                users_to_remove.push(entry.key().clone());
+            }
+        }
+        
+        // Second pass: remove the identified users
+        for user_ip in users_to_remove {
+            if user_stats_state.remove(&user_ip).is_some() {
+                removed_users += 1;
+            }
+        }
+        
+        if removed_count > 0 || removed_users > 0 {
+            tracing::info!("🧹 Cleanup completed: removed {} connections, {} users | {} connections remaining", 
+                removed_count, removed_users, monitoring_state.len());
+        }
+        
+        // Log memory usage statistics
+        tracing::debug!("📊 Memory usage: {} connections, {} users tracked", 
+            monitoring_state.len(), user_stats_state.len());
     }
 }
 
