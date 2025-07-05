@@ -1,5 +1,5 @@
 # Define the URL of the proxy script
-$proxyScriptUrl = "https://prxy.villebiz.com/pac/proxy.pac"
+$proxyScriptUrl = "https://raw.githubusercontent.com/imrany/proxy-server/refs/heads/main/assets/pac/proxy.pac"
 
 # Set the proxy script for Windows Internet settings
 $registryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"

@@ -12,5 +12,5 @@ function FindProxyForURL(url, host) {
     }
 
     // Your main proxy with fallback
-    return "PROXY prxy.villebiz.com:80; DIRECT";
+    return "PROXY prxy.villebiz.com:8080; DIRECT";
 }

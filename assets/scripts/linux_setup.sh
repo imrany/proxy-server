@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the proxy server and port
-PROXY_SERVER="prxy.villebiz.com"
+PROXY_SERVER="prxy.villebiz.com:8080"
 
 # Configure environment variables for HTTP, HTTPS, and FTP proxies
 export http_proxy=$PROXY_SERVER
