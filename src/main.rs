@@ -147,7 +147,7 @@ async fn main() {
         cleanup_old_connections(cleanup_monitoring_state, cleanup_user_stats_state).await;
     });
 
-    // Bind to localhost only since we're behind Nginx proxy
+    // Bind to all interfaces (0.0.0.0) for flexibility
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     tracing::info!("🚀 Proxy server listening on {}", addr);
     tracing::info!("📊 Monitor endpoints:");
@@ -157,7 +157,7 @@ async fn main() {
     tracing::info!("⚙️  Max concurrent connections: {}", MAX_CONCURRENT_CONNECTIONS);
     tracing::info!("🧹 Connection cleanup: every {} seconds, max age {} hours", 
         CLEANUP_INTERVAL_SECS, MAX_CONNECTION_AGE_HOURS);
-    tracing::info!("🔒 Running behind Nginx proxy - binding to localhost only");
+    tracing::info!("🔒 Running behind Nginx proxy");
    
     let listener = TcpListener::bind(addr).await.unwrap();
 
@@ -307,6 +307,24 @@ async fn handle_connection(
                 
                 proxy(req, app_state, real_client_ip).await
             } else {
+                // Check if this is an HTTP request that should be redirected to HTTPS
+                if let Some(proto) = req.headers().get("x-forwarded-proto") {
+                    if proto == "http" && !req.uri().path().starts_with("/api") && !req.uri().path().starts_with("/.well-known") {
+                        // Redirect HTTP to HTTPS for web requests (not API)
+                        let host = req.headers().get("host")
+                            .and_then(|h| h.to_str().ok())
+                            .unwrap_or("prxy.villebiz.com");
+                        
+                        let redirect_url = format!("https://{}{}", host, req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("/"));
+                        
+                        return Ok(Response::builder()
+                            .status(StatusCode::MOVED_PERMANENTLY)
+                            .header("Location", redirect_url)
+                            .body(Body::empty())
+                            .unwrap());
+                    }
+                }
+                
                 app_state.router.clone().oneshot(req)
                     .await
                     .map_err(|err| {
