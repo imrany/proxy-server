@@ -152,7 +152,7 @@ async fn main() {
     let port = 8080;
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let local_ip = local_ip().unwrap();
-    tracing::info!("🚀 Proxy server listening on {}, {:?}:{}", addr, local_ip, port);
+    tracing::info!("🚀 Proxy server listening on {}, \nNetwork: {:?}:{}", addr, local_ip, port);
     tracing::info!("📊 Monitor endpoints:");
     tracing::info!("  - GET /api/connections - All connections");
     tracing::info!("  - GET /api/stats - Statistics");
