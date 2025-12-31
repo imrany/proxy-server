@@ -13,7 +13,7 @@ use axum::{
 
 mod serve;
 use serve::{
-    index_page, 
+    index_page,
     notfound_page
 };
 
@@ -27,7 +27,7 @@ use handlers::{
         ConnectionInfo,
         get_connections,
         get_active_connections,
-    },   
+    },
 };
 
 use hyper::body::Incoming;
@@ -51,6 +51,7 @@ use chrono::{Utc, Duration as ChronoDuration};
 
 mod read_txt;
 use read_txt::check_address_block;
+use local_ip_address::local_ip;
 
 // Configuration constants
 const MAX_CONCURRENT_CONNECTIONS: usize = 1000;
@@ -117,7 +118,7 @@ async fn main() {
 
     let page_routes = Router::new()
         .route("/", get(index_page));
-        
+
     let router = Router::new()
         .merge(page_routes)
         .nest("/api", api_routes)
@@ -148,17 +149,19 @@ async fn main() {
     });
 
     // Bind to all interfaces (0.0.0.0) for flexibility
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    tracing::info!("🚀 Proxy server listening on {}", addr);
+    let port = 8080;
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let local_ip = local_ip().unwrap();
+    tracing::info!("🚀 Proxy server listening on {}, {:?}:{}", addr, local_ip, port);
     tracing::info!("📊 Monitor endpoints:");
     tracing::info!("  - GET /api/connections - All connections");
     tracing::info!("  - GET /api/stats - Statistics");
     tracing::info!("  - GET /api/active - Active connections");
     tracing::info!("⚙️  Max concurrent connections: {}", MAX_CONCURRENT_CONNECTIONS);
-    tracing::info!("🧹 Connection cleanup: every {} seconds, max age {} hours", 
+    tracing::info!("🧹 Connection cleanup: every {} seconds, max age {} hours",
         CLEANUP_INTERVAL_SECS, MAX_CONNECTION_AGE_HOURS);
     tracing::info!("🔒 Running behind Nginx proxy");
-   
+
     let listener = TcpListener::bind(addr).await.unwrap();
 
     loop {
@@ -185,7 +188,7 @@ async fn main() {
 
         tokio::spawn(async move {
             let _permit = permit;
-            
+
             if let Err(e) = handle_connection(stream, client_ip, app_state).await {
                 tracing::warn!("❌ Connection error from {}: {:?}", client_ip, e);
             }
@@ -199,41 +202,41 @@ async fn cleanup_old_connections(
     user_stats_state: OptimizedUserStatsState,
 ) {
     let mut cleanup_interval = tokio::time::interval(Duration::from_secs(CLEANUP_INTERVAL_SECS));
-    
+
     loop {
         cleanup_interval.tick().await;
-        
+
         let now = Utc::now();
         let cutoff_time = now - ChronoDuration::hours(MAX_CONNECTION_AGE_HOURS);
-        
+
         // Clean up old connections
         let mut removed_count = 0;
         let mut keys_to_remove = Vec::new();
-        
+
         // First pass: identify keys to remove
         for entry in monitoring_state.iter() {
             let conn_info = entry.value();
-            
+
             // Remove connections older than cutoff_time, or if we have too many connections
-            if conn_info.timestamp < cutoff_time || 
-               (monitoring_state.len() > MAX_CONNECTIONS_TO_KEEP && 
+            if conn_info.timestamp < cutoff_time ||
+               (monitoring_state.len() > MAX_CONNECTIONS_TO_KEEP &&
                 (conn_info.status == "completed" || conn_info.status == "failed" || conn_info.status == "blocked")) {
                 keys_to_remove.push(entry.key().clone());
             }
         }
-        
+
         // Second pass: remove the identified keys
         for key in keys_to_remove {
             if monitoring_state.remove(&key).is_some() {
                 removed_count += 1;
             }
         }
-        
+
         // Clean up old user stats (keep only users seen in last 7 days)
         let user_cutoff_time = now - ChronoDuration::days(7);
         let mut removed_users = 0;
         let mut users_to_remove = Vec::new();
-        
+
         // First pass: identify users to remove
         for entry in user_stats_state.iter() {
             let user_stats = entry.value();
@@ -241,21 +244,21 @@ async fn cleanup_old_connections(
                 users_to_remove.push(entry.key().clone());
             }
         }
-        
+
         // Second pass: remove the identified users
         for user_ip in users_to_remove {
             if user_stats_state.remove(&user_ip).is_some() {
                 removed_users += 1;
             }
         }
-        
+
         if removed_count > 0 || removed_users > 0 {
-            tracing::info!("🧹 Cleanup completed: removed {} connections, {} users | {} connections remaining", 
+            tracing::info!("🧹 Cleanup completed: removed {} connections, {} users | {} connections remaining",
                 removed_count, removed_users, monitoring_state.len());
         }
-        
+
         // Log memory usage statistics
-        tracing::debug!("📊 Memory usage: {} connections, {} users tracked", 
+        tracing::debug!("📊 Memory usage: {} connections, {} users tracked",
             monitoring_state.len(), user_stats_state.len());
     }
 }
@@ -270,7 +273,7 @@ fn get_real_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
             }
         }
     }
-    
+
     // Try X-Forwarded-For as fallback
     if let Some(forwarded_for) = headers.get("x-forwarded-for") {
         if let Ok(forwarded_str) = forwarded_for.to_str() {
@@ -282,7 +285,7 @@ fn get_real_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
             }
         }
     }
-    
+
     None
 }
 
@@ -292,7 +295,7 @@ async fn handle_connection(
     app_state: AppState,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let client_ip_str = client_ip.to_string();
-    
+
     let tower_service = tower::service_fn(move |req: Request<_>| {
         let app_state = app_state.clone();
         let client_ip_str = client_ip_str.clone();
@@ -304,7 +307,7 @@ async fn handle_connection(
                 let real_client_ip = get_real_client_ip(req.headers())
                     .map(|ip| ip.to_string())
                     .unwrap_or_else(|| client_ip_str.clone());
-                
+
                 proxy(req, app_state, real_client_ip).await
             } else {
                 // Check if this is an HTTP request that should be redirected to HTTPS
@@ -314,9 +317,9 @@ async fn handle_connection(
                         let host = req.headers().get("host")
                             .and_then(|h| h.to_str().ok())
                             .unwrap_or("prxy.villebiz.com");
-                        
+
                         let redirect_url = format!("https://{}{}", host, req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("/"));
-                        
+
                         return Ok(Response::builder()
                             .status(StatusCode::MOVED_PERMANENTLY)
                             .header("Location", redirect_url)
@@ -324,7 +327,7 @@ async fn handle_connection(
                             .unwrap());
                     }
                 }
-                
+
                 app_state.router.clone().oneshot(req)
                     .await
                     .map_err(|err| {
@@ -356,7 +359,7 @@ async fn handle_connection(
 }
 
 async fn proxy(
-    req: Request, 
+    req: Request,
     app_state: AppState,
     client_ip: String
 ) -> Result<Response, hyper::Error> {
@@ -374,13 +377,13 @@ async fn proxy(
 
     if let Some(host_addr) = req.uri().authority().map(|auth| auth.to_string()) {
         let timestamp = Utc::now();
-        
+
         // Check if address should be blocked
         if check_address_block(&host_addr) {
             tracing::warn!("🚫 BLOCKED: {} attempting to connect to {}", client_ip, host_addr);
-            
+
             update_user_stats_optimized(&app_state.user_stats_state, &client_ip, true).await;
-            
+
             let conn_info = ConnectionInfo {
                 client_ip: client_ip.clone(),
                 target_host: host_addr.clone(),
@@ -391,10 +394,10 @@ async fn proxy(
                 status: "blocked".to_string(),
                 duration_ms: Some(0),
             };
-            
+
             let key = format!("{}_{}", client_ip, timestamp.timestamp_millis());
             app_state.monitoring_state.insert(key, conn_info);
-            
+
             return Ok(Response::builder()
                 .status(StatusCode::FORBIDDEN)
                 .header("Content-Type", "text/html")
@@ -422,38 +425,38 @@ async fn proxy(
             status: "active".to_string(),
             duration_ms: None,
         };
-        
+
         app_state.monitoring_state.insert(conn_key.clone(), conn_info);
         update_user_stats_optimized(&app_state.user_stats_state, &client_ip, false).await;
 
         let monitoring_state = app_state.monitoring_state.clone();
         let user_stats_state = app_state.user_stats_state.clone();
-        
+
         tokio::task::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
                     let start_time = Utc::now();
-                    
+
                     let tunnel_result = tokio::time::timeout(
                         Duration::from_secs(TUNNEL_TIMEOUT_SECS),
                         tunnel(upgraded, host_addr.clone())
                     ).await;
-                    
+
                     match tunnel_result {
                         Ok(Ok((bytes_sent, bytes_received))) => {
                             let duration = Utc::now().signed_duration_since(start_time);
                             let duration_ms = duration.num_milliseconds().max(0) as u64;
-                            
-                            tracing::info!("✅ Tunnel completed: {} → {} | ⬆️ {} bytes ⬇️ {} bytes | ⏱️ {}ms", 
+
+                            tracing::info!("✅ Tunnel completed: {} → {} | ⬆️ {} bytes ⬇️ {} bytes | ⏱️ {}ms",
                                 client_ip, host_addr, bytes_sent, bytes_received, duration_ms);
-                            
+
                             if let Some(mut conn) = monitoring_state.get_mut(&conn_key) {
                                 conn.bytes_sent = bytes_sent;
                                 conn.bytes_received = bytes_received;
                                 conn.duration_ms = Some(duration_ms);
                                 conn.status = "completed".to_string();
                             }
-                            
+
                             update_user_stats_bytes(&user_stats_state, &client_ip, bytes_sent + bytes_received).await;
                         }
                         Ok(Err(e)) => {
@@ -498,7 +501,7 @@ async fn tunnel(upgraded: Upgraded, addr: String) -> std::io::Result<(u64, u64)>
         TcpStream::connect(&addr)
     ).await
     .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "Connection timeout"))??;
-    
+
     let mut upgraded = TokioIo::new(upgraded);
 
     let (from_client, from_server) =
@@ -513,7 +516,7 @@ async fn update_user_stats_optimized(
     is_blocked: bool,
 ) {
     let now = Utc::now();
-    
+
     user_stats_state.entry(client_ip.to_string())
         .and_modify(|stats| {
             stats.total_connections += 1;
